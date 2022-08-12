@@ -23,6 +23,9 @@
 #include "Carla/Game/CarlaStatics.h"
 #include "Carla/MapGen/LargeMapManager.h"
 
+// DReyeVR include
+#include "Carla/Sensor/DReyeVRSensor.h" // ADReyeVRSensor
+
 #include <compiler/disable-ue4-macros.h>
 #include <carla/rpc/VehicleLightState.h>
 #include <compiler/enable-ue4-macros.h>
@@ -301,6 +304,15 @@ bool CarlaReplayerHelper::ProcessReplayerPosition(CarlaRecorderPosition Pos1, Ca
     }
     // set new transform
     FTransform Trans(Rotation, Location, FVector(1, 1, 1));
+
+    /// TODO: ensure there is only one DReyeVR ego vehicle in the world
+    if (CarlaActor->GetActor()->GetName().ToLower().Contains("dreyevr"))
+    {
+      /// NOTE: for our DReyeVR ego-vehicle which is unique, do not apply the ActorTransform here
+      // but rather, use the most current sensor data in its own Tick (See AEgoVehicle::ReplayUpdate)
+      return true;
+    }
+
     CarlaActor->SetActorGlobalTransform(Trans, ETeleportType::None);
     return true;
   }
@@ -455,7 +467,20 @@ bool CarlaReplayerHelper::ProcessReplayerFinish(bool bApplyAutopilot, bool bIgno
         break;
     }
   }
+  // tell the DReyeVR sensor to NOT continue replaying
+  if (ADReyeVRSensor::GetDReyeVRSensor())
+    ADReyeVRSensor::GetDReyeVRSensor()->StopReplaying();
+  else
+    UE_LOG(LogTemp, Error, TEXT("No DReyeVR sensor available!"));
   return true;
+}
+
+void CarlaReplayerHelper::ProcessReplayerDReyeVRData(const DReyeVRDataRecorder &DReyeVRDataInstance, const double Per)
+{
+  if (ADReyeVRSensor::GetDReyeVRSensor())
+    ADReyeVRSensor::GetDReyeVRSensor()->UpdateWithReplayData(DReyeVRDataInstance.Data, Per);
+  else
+    UE_LOG(LogTemp, Error, TEXT("No DReyeVR sensor available!"));
 }
 
 void CarlaReplayerHelper::SetActorVelocity(FCarlaActor *CarlaActor, FVector Velocity)
